@@ -111,6 +111,13 @@ const getDirectiveValueEntryValidationError = (
       )
     : null;
 
+const getDirectiveValueElementValidationError = (
+  directiveName: string,
+  directiveValueElement: string,
+): null | Error =>
+  getDirectiveValueValidationError(directiveName, directiveValueElement) ??
+  getDirectiveValueEntryValidationError(directiveName, directiveValueElement);
+
 const stringifyDirectiveValue = (
   directiveValue: Iterable<ContentSecurityPolicyDirectiveValue>,
 ): null | string => {
@@ -186,8 +193,7 @@ const parseDirectives = ({
     for (const element of directiveValue) {
       if (typeof element !== "string") continue;
       throwErrorIfExists(
-        getDirectiveValueValidationError(directiveName, element) ??
-          getDirectiveValueEntryValidationError(directiveName, element),
+        getDirectiveValueElementValidationError(directiveName, element),
       );
     }
 
@@ -234,18 +240,17 @@ function getHeaderValue(
     let directiveValue = "";
     for (const element of rawDirectiveValue) {
       if (typeof element === "function") {
-        let newElement: string;
         try {
-          newElement = element(req, res);
+          const newElement = element(req, res);
+          const err = getDirectiveValueElementValidationError(
+            directiveName,
+            newElement,
+          );
+          if (err) return err;
+          directiveValue += " " + newElement;
         } catch (err) {
           return errify(err);
         }
-        const err = getDirectiveValueEntryValidationError(
-          directiveName,
-          newElement,
-        );
-        if (err) return err;
-        directiveValue += " " + newElement;
       } else {
         directiveValue += " " + element;
       }

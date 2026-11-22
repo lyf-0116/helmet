@@ -540,6 +540,77 @@ describe("Content-Security-Policy middleware", () => {
     );
   });
 
+  it("validates dynamic and static directive value entries with the same rules and messages", async () => {
+    const badDirectiveValueEntries = [
+      "bad;value",
+      "bad,value",
+      ...shouldBeQuoted,
+    ];
+
+    await Promise.all(
+      badDirectiveValueEntries.map(async (directiveValueEntry) => {
+        let staticError: Error | undefined;
+        try {
+          contentSecurityPolicy({
+            useDefaults: false,
+            directives: {
+              defaultSrc: ["'self'", directiveValueEntry],
+            },
+          });
+        } catch (err) {
+          staticError = err as Error;
+        }
+        assert(staticError, "the static configuration should reject the value");
+
+        const middleware = contentSecurityPolicy({
+          useDefaults: false,
+          directives: {
+            defaultSrc: ["'self'", () => directiveValueEntry],
+          },
+        });
+        const app = createServer((req, res) => {
+          middleware(req, res, (err) => {
+            res.end(err ? err.message : "");
+          });
+        });
+
+        const response = await supertest(app)
+          .get("/")
+          .expect(200, staticError.message);
+        assert(!("content-security-policy" in response.header));
+      }),
+    );
+  });
+
+  it("passes non-string values returned by dynamic functions to `next` instead of throwing", async () => {
+    const badReturnValues = [undefined, null, 42, {}];
+
+    await Promise.all(
+      badReturnValues.map(async (badReturnValue) => {
+        const middleware = contentSecurityPolicy({
+          useDefaults: false,
+          directives: {
+            defaultSrc: ["'self'", (() => badReturnValue) as () => string],
+          },
+        });
+        const app = createServer((req, res) => {
+          try {
+            middleware(req, res, (err) => {
+              res.end(err ? "next-error" : "no-error");
+            });
+          } catch {
+            res.end("sync-throw");
+          }
+        });
+
+        const response = await supertest(app)
+          .get("/")
+          .expect(200, "next-error");
+        assert(!("content-security-policy" in response.header));
+      }),
+    );
+  });
+
   it("throws if default-src is missing", () => {
     assert.throws(
       () => {
