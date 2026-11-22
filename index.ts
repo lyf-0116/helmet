@@ -70,6 +70,59 @@ type MiddlewareFunction = (
   next: (error?: Error) => void,
 ) => void;
 
+type MiddlewareFactory<Options> = (options?: Options) => MiddlewareFunction;
+
+interface MiddlewareDescription<Options> {
+  middleware: MiddlewareFactory<Options>;
+  headerName?: string;
+  takesOptions?: boolean;
+  enabledByDefault?: boolean;
+}
+
+function getMiddlewareFunctionsFromOption<Options>(
+  option: Options | boolean | undefined,
+  {
+    middleware,
+    headerName,
+    takesOptions = true,
+    enabledByDefault = true,
+  }: MiddlewareDescription<Options>,
+): MiddlewareFunction[] {
+  switch (option) {
+    case undefined:
+      return enabledByDefault ? [middleware()] : [];
+    case true:
+      return [middleware()];
+    case false:
+      return [];
+    default:
+      if (takesOptions) {
+        return [middleware(option)];
+      }
+      console.warn(
+        `${headerName} does not take options. Remove the property to silence this warning.`,
+      );
+      return [middleware()];
+  }
+}
+
+function getOptionValue<
+  NewKey extends keyof HelmetOptions,
+  LegacyKey extends keyof HelmetOptions,
+>(
+  options: Readonly<HelmetOptions>,
+  newKey: NewKey,
+  legacyKey: LegacyKey,
+  headerName: string,
+): HelmetOptions[NewKey] | HelmetOptions[LegacyKey] {
+  if (newKey in options && legacyKey in options) {
+    throw new Error(
+      `${headerName} option was specified twice. Remove the \`${legacyKey}\` option to fix this error.`,
+    );
+  }
+  return options[newKey] ?? options[legacyKey];
+}
+
 type Helmet = {
   (
     options?: Readonly<HelmetOptions>,
@@ -107,250 +160,107 @@ type Helmet = {
 function getMiddlewareFunctionsFromOptions(
   options: Readonly<HelmetOptions>,
 ): MiddlewareFunction[] {
-  const result: MiddlewareFunction[] = [];
-
-  switch (options.contentSecurityPolicy) {
-    case undefined:
-    case true:
-      result.push(contentSecurityPolicy());
-      break;
-    case false:
-      break;
-    default:
-      result.push(contentSecurityPolicy(options.contentSecurityPolicy));
-      break;
-  }
-
-  switch (options.crossOriginEmbedderPolicy) {
-    case undefined:
-    case false:
-      break;
-    case true:
-      result.push(crossOriginEmbedderPolicy());
-      break;
-    default:
-      result.push(crossOriginEmbedderPolicy(options.crossOriginEmbedderPolicy));
-      break;
-  }
-
-  switch (options.crossOriginOpenerPolicy) {
-    case undefined:
-    case true:
-      result.push(crossOriginOpenerPolicy());
-      break;
-    case false:
-      break;
-    default:
-      result.push(crossOriginOpenerPolicy(options.crossOriginOpenerPolicy));
-      break;
-  }
-
-  switch (options.crossOriginResourcePolicy) {
-    case undefined:
-    case true:
-      result.push(crossOriginResourcePolicy());
-      break;
-    case false:
-      break;
-    default:
-      result.push(crossOriginResourcePolicy(options.crossOriginResourcePolicy));
-      break;
-  }
-
-  switch (options.originAgentCluster) {
-    case undefined:
-    case true:
-      result.push(originAgentCluster());
-      break;
-    case false:
-      break;
-    default:
-      console.warn(
-        "Origin-Agent-Cluster does not take options. Remove the property to silence this warning.",
-      );
-      result.push(originAgentCluster());
-      break;
-  }
-
-  switch (options.referrerPolicy) {
-    case undefined:
-    case true:
-      result.push(referrerPolicy());
-      break;
-    case false:
-      break;
-    default:
-      result.push(referrerPolicy(options.referrerPolicy));
-      break;
-  }
-
-  if ("strictTransportSecurity" in options && "hsts" in options) {
-    throw new Error(
-      "Strict-Transport-Security option was specified twice. Remove the `hsts` option to fix this error.",
-    );
-  }
-  const strictTransportSecurityOption =
-    options.strictTransportSecurity ?? options.hsts;
-  switch (strictTransportSecurityOption) {
-    case undefined:
-    case true:
-      result.push(strictTransportSecurity());
-      break;
-    case false:
-      break;
-    default:
-      result.push(strictTransportSecurity(strictTransportSecurityOption));
-      break;
-  }
-
-  if ("xContentTypeOptions" in options && "noSniff" in options) {
-    throw new Error(
-      "X-Content-Type-Options option was specified twice. Remove the `noSniff` option to fix this error.",
-    );
-  }
-  const xContentTypeOptionsOption =
-    options.xContentTypeOptions ?? options.noSniff;
-  switch (xContentTypeOptionsOption) {
-    case undefined:
-    case true:
-      result.push(xContentTypeOptions());
-      break;
-    case false:
-      break;
-    default:
-      console.warn(
-        "X-Content-Type-Options does not take options. Remove the property to silence this warning.",
-      );
-      result.push(xContentTypeOptions());
-      break;
-  }
-
-  if ("xDnsPrefetchControl" in options && "dnsPrefetchControl" in options) {
-    throw new Error(
-      "X-DNS-Prefetch-Control option was specified twice. Remove the `dnsPrefetchControl` option to fix this error.",
-    );
-  }
-  const xDnsPrefetchControlOption =
-    options.xDnsPrefetchControl ?? options.dnsPrefetchControl;
-  switch (xDnsPrefetchControlOption) {
-    case undefined:
-    case true:
-      result.push(xDnsPrefetchControl());
-      break;
-    case false:
-      break;
-    default:
-      result.push(xDnsPrefetchControl(xDnsPrefetchControlOption));
-      break;
-  }
-
-  if ("xDownloadOptions" in options && "ieNoOpen" in options) {
-    throw new Error(
-      "X-Download-Options option was specified twice. Remove the `ieNoOpen` option to fix this error.",
-    );
-  }
-  const xDownloadOptionsOption = options.xDownloadOptions ?? options.ieNoOpen;
-  switch (xDownloadOptionsOption) {
-    case undefined:
-    case true:
-      result.push(xDownloadOptions());
-      break;
-    case false:
-      break;
-    default:
-      console.warn(
-        "X-Download-Options does not take options. Remove the property to silence this warning.",
-      );
-      result.push(xDownloadOptions());
-      break;
-  }
-
-  if ("xFrameOptions" in options && "frameguard" in options) {
-    throw new Error(
-      "X-Frame-Options option was specified twice. Remove the `frameguard` option to fix this error.",
-    );
-  }
-  const xFrameOptionsOption = options.xFrameOptions ?? options.frameguard;
-  switch (xFrameOptionsOption) {
-    case undefined:
-    case true:
-      result.push(xFrameOptions());
-      break;
-    case false:
-      break;
-    default:
-      result.push(xFrameOptions(xFrameOptionsOption));
-      break;
-  }
-
-  if (
-    "xPermittedCrossDomainPolicies" in options &&
-    "permittedCrossDomainPolicies" in options
-  ) {
-    throw new Error(
-      "X-Permitted-Cross-Domain-Policies option was specified twice. Remove the `permittedCrossDomainPolicies` option to fix this error.",
-    );
-  }
-  const xPermittedCrossDomainPoliciesOption =
-    options.xPermittedCrossDomainPolicies ??
-    options.permittedCrossDomainPolicies;
-  switch (xPermittedCrossDomainPoliciesOption) {
-    case undefined:
-    case true:
-      result.push(xPermittedCrossDomainPolicies());
-      break;
-    case false:
-      break;
-    default:
-      result.push(
-        xPermittedCrossDomainPolicies(xPermittedCrossDomainPoliciesOption),
-      );
-      break;
-  }
-
-  if ("xPoweredBy" in options && "hidePoweredBy" in options) {
-    throw new Error(
-      "X-Powered-By option was specified twice. Remove the `hidePoweredBy` option to fix this error.",
-    );
-  }
-  const xPoweredByOption = options.xPoweredBy ?? options.hidePoweredBy;
-  switch (xPoweredByOption) {
-    case undefined:
-    case true:
-      result.push(xPoweredBy());
-      break;
-    case false:
-      break;
-    default:
-      console.warn(
-        "X-Powered-By does not take options. Remove the property to silence this warning.",
-      );
-      result.push(xPoweredBy());
-      break;
-  }
-
-  if ("xXssProtection" in options && "xssFilter" in options) {
-    throw new Error(
-      "X-XSS-Protection option was specified twice. Remove the `xssFilter` option to fix this error.",
-    );
-  }
-  const xXssProtectionOption = options.xXssProtection ?? options.xssFilter;
-  switch (xXssProtectionOption) {
-    case undefined:
-    case true:
-      result.push(xXssProtection());
-      break;
-    case false:
-      break;
-    default:
-      console.warn(
-        "X-XSS-Protection does not take options. Remove the property to silence this warning.",
-      );
-      result.push(xXssProtection());
-      break;
-  }
-
-  return result;
+  return [
+    ...getMiddlewareFunctionsFromOption(options.contentSecurityPolicy, {
+      middleware: contentSecurityPolicy,
+    }),
+    ...getMiddlewareFunctionsFromOption(options.crossOriginEmbedderPolicy, {
+      middleware: crossOriginEmbedderPolicy,
+      enabledByDefault: false,
+    }),
+    ...getMiddlewareFunctionsFromOption(options.crossOriginOpenerPolicy, {
+      middleware: crossOriginOpenerPolicy,
+    }),
+    ...getMiddlewareFunctionsFromOption(options.crossOriginResourcePolicy, {
+      middleware: crossOriginResourcePolicy,
+    }),
+    ...getMiddlewareFunctionsFromOption(options.originAgentCluster, {
+      middleware: originAgentCluster,
+      headerName: "Origin-Agent-Cluster",
+      takesOptions: false,
+    }),
+    ...getMiddlewareFunctionsFromOption(options.referrerPolicy, {
+      middleware: referrerPolicy,
+    }),
+    ...getMiddlewareFunctionsFromOption(
+      getOptionValue(
+        options,
+        "strictTransportSecurity",
+        "hsts",
+        "Strict-Transport-Security",
+      ),
+      { middleware: strictTransportSecurity },
+    ),
+    ...getMiddlewareFunctionsFromOption(
+      getOptionValue(
+        options,
+        "xContentTypeOptions",
+        "noSniff",
+        "X-Content-Type-Options",
+      ),
+      {
+        middleware: xContentTypeOptions,
+        headerName: "X-Content-Type-Options",
+        takesOptions: false,
+      },
+    ),
+    ...getMiddlewareFunctionsFromOption(
+      getOptionValue(
+        options,
+        "xDnsPrefetchControl",
+        "dnsPrefetchControl",
+        "X-DNS-Prefetch-Control",
+      ),
+      { middleware: xDnsPrefetchControl },
+    ),
+    ...getMiddlewareFunctionsFromOption(
+      getOptionValue(
+        options,
+        "xDownloadOptions",
+        "ieNoOpen",
+        "X-Download-Options",
+      ),
+      {
+        middleware: xDownloadOptions,
+        headerName: "X-Download-Options",
+        takesOptions: false,
+      },
+    ),
+    ...getMiddlewareFunctionsFromOption(
+      getOptionValue(options, "xFrameOptions", "frameguard", "X-Frame-Options"),
+      { middleware: xFrameOptions },
+    ),
+    ...getMiddlewareFunctionsFromOption(
+      getOptionValue(
+        options,
+        "xPermittedCrossDomainPolicies",
+        "permittedCrossDomainPolicies",
+        "X-Permitted-Cross-Domain-Policies",
+      ),
+      { middleware: xPermittedCrossDomainPolicies },
+    ),
+    ...getMiddlewareFunctionsFromOption(
+      getOptionValue(options, "xPoweredBy", "hidePoweredBy", "X-Powered-By"),
+      {
+        middleware: xPoweredBy,
+        headerName: "X-Powered-By",
+        takesOptions: false,
+      },
+    ),
+    ...getMiddlewareFunctionsFromOption(
+      getOptionValue(
+        options,
+        "xXssProtection",
+        "xssFilter",
+        "X-XSS-Protection",
+      ),
+      {
+        middleware: xXssProtection,
+        headerName: "X-XSS-Protection",
+        takesOptions: false,
+      },
+    ),
+  ];
 }
 
 const helmet: Helmet = Object.assign(
