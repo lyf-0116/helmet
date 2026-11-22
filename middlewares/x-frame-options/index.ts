@@ -1,26 +1,27 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
+import { validateHeaderValue } from "../shared";
 
 export type XFrameOptionsOptions = {
   action?: "deny" | "sameorigin";
 };
 
+const ALLOWED_ACTIONS = new Set<"DENY" | "SAMEORIGIN">(["DENY", "SAMEORIGIN"]);
+
 function getHeaderValueFromOptions({
   action = "sameorigin",
 }: Readonly<XFrameOptionsOptions>): string {
-  const normalizedAction =
-    typeof action === "string" ? action.toUpperCase() : action;
-
-  switch (normalizedAction) {
-    case "SAME-ORIGIN":
-      return "SAMEORIGIN";
-    case "DENY":
-    case "SAMEORIGIN":
-      return normalizedAction;
-    default:
-      throw new Error(
-        `X-Frame-Options received an invalid action ${JSON.stringify(action)}`,
-      );
-  }
+  return validateHeaderValue({
+    allowedValues: ALLOWED_ACTIONS,
+    value: action,
+    normalize: (value) => {
+      const normalizedAction = value.toUpperCase();
+      return normalizedAction === "SAME-ORIGIN"
+        ? "SAMEORIGIN"
+        : normalizedAction;
+    },
+    invalidValueMessage: (value) =>
+      `X-Frame-Options received an invalid action ${JSON.stringify(value)}`,
+  });
 }
 
 function xFrameOptions(options: Readonly<XFrameOptionsOptions> = {}) {

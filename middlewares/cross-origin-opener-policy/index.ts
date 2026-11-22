@@ -1,4 +1,5 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
+import { validateHeaderValue } from "../shared";
 
 export type CrossOriginOpenerPolicyOptions = {
   policy?:
@@ -18,15 +19,14 @@ const ALLOWED_POLICIES = new Set([
 function getHeaderValueFromOptions({
   policy = "same-origin",
 }: Readonly<CrossOriginOpenerPolicyOptions>): string {
-  if (ALLOWED_POLICIES.has(policy)) {
-    return policy;
-  } else {
-    throw new Error(
+  return validateHeaderValue({
+    allowedValues: ALLOWED_POLICIES,
+    value: policy,
+    invalidValueMessage: (value) =>
       `Cross-Origin-Opener-Policy does not support the ${JSON.stringify(
-        policy,
+        value,
       )} policy`,
-    );
-  }
+  });
 }
 
 function crossOriginOpenerPolicy(

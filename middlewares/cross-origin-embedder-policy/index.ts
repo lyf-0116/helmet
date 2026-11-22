@@ -1,4 +1,5 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
+import { validateHeaderValue } from "../shared";
 
 export type CrossOriginEmbedderPolicyOptions = {
   policy?: "require-corp" | "credentialless" | "unsafe-none";
@@ -13,15 +14,14 @@ const ALLOWED_POLICIES = new Set([
 function getHeaderValueFromOptions({
   policy = "require-corp",
 }: Readonly<CrossOriginEmbedderPolicyOptions>): string {
-  if (ALLOWED_POLICIES.has(policy)) {
-    return policy;
-  } else {
-    throw new Error(
+  return validateHeaderValue({
+    allowedValues: ALLOWED_POLICIES,
+    value: policy,
+    invalidValueMessage: (value) =>
       `Cross-Origin-Embedder-Policy does not support the ${JSON.stringify(
-        policy,
+        value,
       )} policy`,
-    );
-  }
+  });
 }
 
 function crossOriginEmbedderPolicy(

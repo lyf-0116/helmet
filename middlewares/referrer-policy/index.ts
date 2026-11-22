@@ -1,4 +1,5 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
+import { validateHeaderValue } from "../shared";
 
 type ReferrerPolicyToken =
   | "no-referrer"
@@ -30,31 +31,21 @@ const ALLOWED_TOKENS = new Set<ReferrerPolicyToken>([
 function getHeaderValueFromOptions({
   policy = ["no-referrer"],
 }: Readonly<ReferrerPolicyOptions>): string {
-  const tokens = typeof policy === "string" ? [policy] : policy;
-
-  if (tokens.length === 0) {
-    throw new Error("Referrer-Policy received no policy tokens");
-  }
-
-  const tokensSeen = new Set<ReferrerPolicyToken>();
-  tokens.forEach((token) => {
-    if (!ALLOWED_TOKENS.has(token)) {
-      throw new Error(
-        `Referrer-Policy received an unexpected policy token ${JSON.stringify(
-          token,
-        )}`,
-      );
-    } else if (tokensSeen.has(token)) {
-      throw new Error(
-        `Referrer-Policy received a duplicate policy token ${JSON.stringify(
-          token,
-        )}`,
-      );
-    }
-    tokensSeen.add(token);
+  return validateHeaderValue({
+    allowedValues: ALLOWED_TOKENS,
+    value: policy,
+    allowArray: true,
+    allowEmptyString: true,
+    invalidValueMessage: (value) =>
+      `Referrer-Policy received an unexpected policy token ${JSON.stringify(
+        value,
+      )}`,
+    emptyArrayMessage: () => "Referrer-Policy received no policy tokens",
+    duplicateValueMessage: (value) =>
+      `Referrer-Policy received a duplicate policy token ${JSON.stringify(
+        value,
+      )}`,
   });
-
-  return tokens.join(",");
 }
 
 function referrerPolicy(options: Readonly<ReferrerPolicyOptions> = {}) {

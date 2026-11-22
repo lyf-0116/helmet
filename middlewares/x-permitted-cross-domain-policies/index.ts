@@ -1,4 +1,5 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
+import { validateHeaderValue } from "../shared";
 
 export type XPermittedCrossDomainPoliciesOptions = {
   permittedPolicies?: "none" | "master-only" | "by-content-type" | "all";
@@ -14,15 +15,14 @@ const ALLOWED_PERMITTED_POLICIES = new Set([
 function getHeaderValueFromOptions({
   permittedPolicies = "none",
 }: Readonly<XPermittedCrossDomainPoliciesOptions>): string {
-  if (ALLOWED_PERMITTED_POLICIES.has(permittedPolicies)) {
-    return permittedPolicies;
-  } else {
-    throw new Error(
+  return validateHeaderValue({
+    allowedValues: ALLOWED_PERMITTED_POLICIES,
+    value: permittedPolicies,
+    invalidValueMessage: (value) =>
       `X-Permitted-Cross-Domain-Policies does not support ${JSON.stringify(
-        permittedPolicies,
+        value,
       )}`,
-    );
-  }
+  });
 }
 
 function xPermittedCrossDomainPolicies(

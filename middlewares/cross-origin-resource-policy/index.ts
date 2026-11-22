@@ -1,4 +1,5 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
+import { validateHeaderValue } from "../shared";
 
 export type CrossOriginResourcePolicyOptions = {
   policy?: "same-origin" | "same-site" | "cross-origin";
@@ -9,15 +10,14 @@ const ALLOWED_POLICIES = new Set(["same-origin", "same-site", "cross-origin"]);
 function getHeaderValueFromOptions({
   policy = "same-origin",
 }: Readonly<CrossOriginResourcePolicyOptions>): string {
-  if (ALLOWED_POLICIES.has(policy)) {
-    return policy;
-  } else {
-    throw new Error(
+  return validateHeaderValue({
+    allowedValues: ALLOWED_POLICIES,
+    value: policy,
+    invalidValueMessage: (value) =>
       `Cross-Origin-Resource-Policy does not support the ${JSON.stringify(
-        policy,
+        value,
       )} policy`,
-    );
-  }
+  });
 }
 
 function crossOriginResourcePolicy(
