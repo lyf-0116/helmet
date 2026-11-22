@@ -564,6 +564,16 @@ X-Frame-Options: SAMEORIGIN
 
 The legacy `X-Frame-Options` header to help you mitigate [clickjacking attacks](https://en.wikipedia.org/wiki/Clickjacking). This header is superseded by [the `frame-ancestors` Content Security Policy directive](https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Content-Security-Policy/frame-ancestors) but is still useful on old browsers or if no CSP is used. For more, see [the documentation on MDN](https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/X-Frame-Options).
 
+When you do not configure `X-Frame-Options` explicitly, Helmet derives it from the enforced `Content-Security-Policy` `frame-ancestors` directive so the two headers never contradict each other:
+
+- `frame-ancestors 'none'` produces `X-Frame-Options: DENY`.
+- `frame-ancestors 'self'` produces `X-Frame-Options: SAMEORIGIN`.
+- A policy that allows any origin (`*`), or any origin the legacy format cannot express (one or more external origins), leaves the header off because emitting a stricter value would block those partners.
+- A report-only policy is not treated as enforced, so it never changes the header.
+- When there is no enforced `frame-ancestors` to derive from, the historical default `SAMEORIGIN` is kept.
+
+An explicitly configured `xFrameOptions` (or legacy `frameguard`) value always wins and is never overwritten.
+
 ```js
 // Sets "X-Frame-Options: SAMEORIGIN"
 app.use(helmet());

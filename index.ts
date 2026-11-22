@@ -26,6 +26,7 @@ import xDownloadOptions from "./middlewares/x-download-options/index.js";
 import xFrameOptions, {
   type XFrameOptionsOptions,
 } from "./middlewares/x-frame-options/index.js";
+import deriveXFrameOptionsFromResponse from "./middlewares/x-frame-options/derive-from-csp.js";
 import xPermittedCrossDomainPolicies, {
   type XPermittedCrossDomainPoliciesOptions,
 } from "./middlewares/x-permitted-cross-domain-policies/index.js";
@@ -69,6 +70,20 @@ type MiddlewareFunction = (
   res: ServerResponse,
   next: (error?: Error) => void,
 ) => void;
+
+// The X-Frame-Options middleware, but its value is derived from the
+// Content-Security-Policy `frame-ancestors` directive that the earlier CSP
+// middleware just wrote to the response, instead of being fixed when helmet is
+// constructed. Running it after CSP is what makes the derivation reliable.
+function derivedXFrameOptions(): MiddlewareFunction {
+  return function derivedXFrameOptionsMiddleware(_req, res, next) {
+    const derived = deriveXFrameOptionsFromResponse(res);
+    if (derived !== null) {
+      res.setHeader("X-Frame-Options", derived ?? "SAMEORIGIN");
+    }
+    next();
+  };
+}
 
 type Helmet = {
   (
@@ -274,11 +289,17 @@ function getMiddlewareFunctionsFromOptions(
   switch (xFrameOptionsOption) {
     case undefined:
     case true:
-      result.push(xFrameOptions());
+      // No explicit X-Frame-Options value: derive it from the enforced CSP
+      // `frame-ancestors` directive. This is pushed after the CSP middleware
+      // above, so the policy header is already on the response by the time it
+      // runs; reordering these would silently break the derivation.
+      result.push(derivedXFrameOptions());
       break;
     case false:
       break;
     default:
+      // An explicitly configured X-Frame-Options value wins and is never
+      // overwritten by derivation.
       result.push(xFrameOptions(xFrameOptionsOption));
       break;
   }

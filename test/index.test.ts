@@ -445,4 +445,179 @@ describe("helmet", () => {
     );
     assert.strictEqual(helmet.xssFilter.name, xXssProtection.name);
   });
+
+  describe("X-Frame-Options derived from Content-Security-Policy", () => {
+    it("derives SAMEORIGIN from the default frame-ancestors 'self'", async () => {
+      await check(topLevel(), {
+        "content-security-policy":
+          "default-src 'self';base-uri 'self';font-src 'self' https: data:;form-action 'self';frame-ancestors 'self';img-src 'self' data:;object-src 'none';script-src 'self';script-src-attr 'none';style-src 'self' https: 'unsafe-inline';upgrade-insecure-requests",
+        "x-frame-options": "SAMEORIGIN",
+      });
+    });
+
+    it("derives DENY from frame-ancestors 'none'", async () => {
+      await check(
+        topLevel({
+          contentSecurityPolicy: {
+            directives: { frameAncestors: ["'none'"] },
+          },
+        }),
+        {
+          "x-frame-options": "DENY",
+        },
+      );
+    });
+
+    it("derives SAMEORIGIN from a self-only frame-ancestors", async () => {
+      await check(
+        topLevel({
+          contentSecurityPolicy: {
+            directives: { frameAncestors: ["'self'"] },
+          },
+        }),
+        {
+          "x-frame-options": "SAMEORIGIN",
+        },
+      );
+    });
+
+    it("omits the header when frame-ancestors allows any origin", async () => {
+      await check(
+        topLevel({
+          contentSecurityPolicy: {
+            directives: { frameAncestors: ["*"] },
+          },
+        }),
+        {
+          "x-frame-options": null,
+        },
+      );
+    });
+
+    it("omits the header when frame-ancestors names an external origin", async () => {
+      await check(
+        topLevel({
+          contentSecurityPolicy: {
+            directives: {
+              frameAncestors: ["'self'", "https://partner.example.com"],
+            },
+          },
+        }),
+        {
+          "x-frame-options": null,
+        },
+      );
+    });
+
+    it("omits the header when frame-ancestors lists multiple external origins", async () => {
+      await check(
+        topLevel({
+          contentSecurityPolicy: {
+            useDefaults: false,
+            directives: {
+              defaultSrc: ["'self'"],
+              frameAncestors: [
+                "https://a.example.com",
+                "https://b.example.com",
+              ],
+            },
+          },
+        }),
+        {
+          "x-frame-options": null,
+        },
+      );
+    });
+
+    it("does not derive a block from a report-only policy", async () => {
+      await check(
+        topLevel({
+          contentSecurityPolicy: {
+            reportOnly: true,
+            directives: { frameAncestors: ["'none'"] },
+          },
+        }),
+        {
+          "content-security-policy": null,
+          "content-security-policy-report-only":
+            "default-src 'self';base-uri 'self';font-src 'self' https: data:;form-action 'self';frame-ancestors 'none';img-src 'self' data:;object-src 'none';script-src 'self';script-src-attr 'none';style-src 'self' https: 'unsafe-inline';upgrade-insecure-requests",
+          "x-frame-options": "SAMEORIGIN",
+        },
+      );
+    });
+
+    it("keeps the historical default when CSP is disabled", async () => {
+      await check(topLevel({ contentSecurityPolicy: false }), {
+        "content-security-policy": null,
+        "x-frame-options": "SAMEORIGIN",
+      });
+    });
+
+    it("keeps the historical default when no frame-ancestors is present", async () => {
+      await check(
+        topLevel({
+          contentSecurityPolicy: {
+            useDefaults: false,
+            directives: { "default-src": ["'self'"] },
+          },
+        }),
+        {
+          "x-frame-options": "SAMEORIGIN",
+        },
+      );
+    });
+
+    it("does not overwrite an explicitly configured X-Frame-Options", async () => {
+      await check(
+        topLevel({
+          xFrameOptions: { action: "deny" },
+          contentSecurityPolicy: {
+            directives: { frameAncestors: ["'self'"] },
+          },
+        }),
+        {
+          "x-frame-options": "DENY",
+        },
+      );
+
+      await check(
+        topLevel({
+          frameguard: { action: "deny" },
+          contentSecurityPolicy: {
+            directives: { frameAncestors: ["*"] },
+          },
+        }),
+        {
+          "x-frame-options": "DENY",
+        },
+      );
+    });
+
+    it("can still disable X-Frame-Options explicitly", async () => {
+      await check(
+        topLevel({
+          xFrameOptions: false,
+          contentSecurityPolicy: {
+            directives: { frameAncestors: ["'none'"] },
+          },
+        }),
+        {
+          "x-frame-options": null,
+        },
+      );
+    });
+
+    it("derives from a dynamically computed frame-ancestors", async () => {
+      await check(
+        topLevel({
+          contentSecurityPolicy: {
+            directives: { frameAncestors: [() => "'none'"] },
+          },
+        }),
+        {
+          "x-frame-options": "DENY",
+        },
+      );
+    });
+  });
 });
